@@ -19,8 +19,18 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Simple CORS middleware to allow requests from the frontend
 app.use((req, res, next) => {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || FRONTEND_URL;
-  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  const origin = req.headers.origin;
+  const allowedOrigins = [
+    FRONTEND_URL,
+    process.env.ALLOWED_ORIGIN,
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ].filter(Boolean);
+  
+  // Allow any origin that matches or if no origin specified (like curl requests)
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   // Echo requested headers if present, otherwise allow common and custom headers
   const requestedHeaders = req.header('access-control-request-headers');
