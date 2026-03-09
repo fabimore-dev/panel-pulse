@@ -8,18 +8,19 @@
 const axios = require('axios');
 
 // Panel scoring configuration — max scores per dimension; final score = SUM of all
+// Weighted: Mandatory (25%) + Technical Depth (25%) = 50%; remaining 6 dims share 50%
 const PANEL_DIMENSIONS = {
-  'Mandatory Skill Coverage': { max: 2.0 },
-  'Technical Depth':          { max: 1.5 },
-  'Scenario / Risk Evaluation':{ max: 1.0 },
-  'Framework Knowledge':      { max: 1.0 },
-  'Hands-on Validation':      { max: 1.0 },
-  'Leadership Evaluation':    { max: 1.0 },
-  'Behavioral Assessment':    { max: 1.0 },
-  'Interview Structure':      { max: 1.5 }
+  'Mandatory Skill Coverage':   { max: 2.5  }, // 25% of 10
+  'Technical Depth':            { max: 2.5  }, // 25% of 10
+  'Scenario / Risk Evaluation': { max: 1.0  }, // \
+  'Framework Knowledge':        { max: 1.0  }, //  \
+  'Hands-on Validation':        { max: 1.0  }, //   > remaining 5.0 / 10 (50%)
+  'Leadership Evaluation':      { max: 0.75 }, //  /
+  'Behavioral Assessment':      { max: 0.75 }, // /
+  'Interview Structure':        { max: 0.5  }  // /
 };
-// Maximum possible panel score (sum of all dimension maxes)
-const MAX_PANEL_SCORE = Object.values(PANEL_DIMENSIONS).reduce((s, d) => s + d.max, 0); // 11.0
+// Maximum possible panel score (sum of all dimension maxes) = 10.0
+const MAX_PANEL_SCORE = Object.values(PANEL_DIMENSIONS).reduce((s, d) => s + d.max, 0);
 
 // System prompts
 const PANEL_SCORING_SYSTEM_PROMPT = `You are an expert panel evaluator assessing interview candidates. 
@@ -68,8 +69,15 @@ Professional. Structured. Precise. Enterprise HR/Senior Manager standard. Neutra
 
 const PANEL_SUMMARY_SYSTEM_PROMPT = `You are a Senior HR Manager reviewing a panel interview evaluation report.
 Write a concise 3-5 sentence paragraph summarising the panel's overall effectiveness in this interview.
-Cover: the overall efficiency rating, the strongest and weakest dimensions, and a closing recommendation.
-Use professional, neutral tone. No bullet points. No headings. Plain paragraph only.`;
+
+STRICT RULES — follow exactly:
+1. The overall score is always out of 10.0. State it as "X out of 10" (never "out of 11").
+2. Each dimension in the data is labelled ACCEPTABLE (scored ≥50% of its max) or WEAK (scored <50% of its max).
+   - Do NOT mention, criticize, or reference any dimension labelled ACCEPTABLE.
+   - Only mention WEAK dimensions as areas needing improvement.
+3. Mention positive highlights and strengths ONLY if the Score Category is "Good".
+   For "Moderate" or "Poor", focus exclusively on the WEAK dimensions — no praise.
+4. Use professional, neutral tone. No bullet points. No headings. Plain paragraph only.`;
 
 const L2_VALIDATION_SYSTEM_PROMPT = `You are an L2 validation expert reviewing rejection reasons.
 Classify the probing depth and validate evidence from transcripts.
@@ -228,14 +236,14 @@ Return ONLY a valid JSON object (no extra text):
   "score": <sum of all category scores>,
   "confidence": <0-1>,
   "categories": {
-    "Mandatory Skill Coverage": <0 to 2.0>,
-    "Technical Depth": <0 to 1.5>,
+    "Mandatory Skill Coverage": <0 to 2.5>,
+    "Technical Depth": <0 to 2.5>,
     "Scenario / Risk Evaluation": <0 to 1.0>,
     "Framework Knowledge": <0 to 1.0>,
     "Hands-on Validation": <0 to 1.0>,
-    "Leadership Evaluation": <0 to 1.0>,
-    "Behavioral Assessment": <0 to 1.0>,
-    "Interview Structure": <0 to 1.5>
+    "Leadership Evaluation": <0 to 0.75>,
+    "Behavioral Assessment": <0 to 0.75>,
+    "Interview Structure": <0 to 0.5>
   },
   "evidence": {
     "Mandatory Skill Coverage": ["Interviewer question or probing statement that covered this dimension"],
@@ -539,19 +547,31 @@ async function _generateRefinedJD(jd) {
  */
 async function _generatePanelSummary(evaluation, jd) {
   try {
+    // Derive score category from percentage of MAX_PANEL_SCORE
+    const scorePct = evaluation.score / MAX_PANEL_SCORE;
+    const scoreCategory = evaluation.score_category ||
+      (scorePct >= 0.8 ? 'Good' : scorePct >= 0.5 ? 'Moderate' : 'Poor');
+
+    // Label each dimension ACCEPTABLE (>=50% of its max) or WEAK (<50%)
     const catLines = Object.entries(evaluation.categories || {})
-      .map(([dim, score]) => `  - ${dim}: ${score}`)
+      .map(([dim, score]) => {
+        const max = PANEL_DIMENSIONS[dim]?.max ?? 1;
+        const label = score >= max * 0.5 ? 'ACCEPTABLE' : 'WEAK';
+        return `  - ${dim}: ${score}/${max} — ${label}`;
+      })
       .join('\n');
+
     const userPrompt = `Panel Evaluation Results:
-- Overall Score: ${evaluation.score} / 11.0
-- Score Category: ${evaluation.score_category || 'N/A'}
-- Dimensions:
+- Overall Score: ${evaluation.score} / ${MAX_PANEL_SCORE}
+- Score Category: ${scoreCategory}
+- Dimensions (ACCEPTABLE = scored ≥50% of its max; WEAK = scored <50% of its max):
 ${catLines}
 
 Job Description (brief):
 ${String(jd || '').substring(0, 400)}
 
 Write a concise 3-5 sentence professional paragraph summarising this panel's interview effectiveness.`;
+
     const summary = await _callGroqWithRetry(userPrompt, PANEL_SUMMARY_SYSTEM_PROMPT);
     return summary.trim();
   } catch (err) {
