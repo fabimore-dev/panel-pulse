@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { chatApi } from '@/lib/api/chat.api';
-import type { ChatMessage, ChatHistoryEntry, ChatSource } from '@/lib/api/chat.api';
-import { Send, Bot, User, Sparkles, ChevronDown, ChevronUp, Zap } from 'lucide-react';
+import type { ChatMessage, ChatHistoryEntry, ChatSource, SearchMode, ChatSearchSettings } from '@/lib/api/chat.api';
+import { Send, Bot, User, Sparkles, ChevronDown, ChevronUp, Zap, SlidersHorizontal, X } from 'lucide-react';
 
 // ─── Starter questions ───────────────────────────────────────────────────────
 
@@ -14,6 +14,180 @@ const STARTER_QUESTIONS = [
   'Which panels scored poorly on Technical Depth?',
   'Show evaluations where the interview structure was strong.',
 ];
+
+// ─── Search mode meta ─────────────────────────────────────────────────────────
+
+const SEARCH_MODES: {
+  mode: SearchMode;
+  label: string;
+  shortLabel: string;
+  description: string;
+  color: string;
+  activeClass: string;
+}[] = [
+  {
+    mode: 'hybrid',
+    label: 'Hybrid Search',
+    shortLabel: 'Hybrid',
+    description: 'Combines BM25 keyword index + vector semantic search. Best balanced precision.',
+    color: 'indigo',
+    activeClass: 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300',
+  },
+  {
+    mode: 'bm25',
+    label: 'Index Search',
+    shortLabel: 'Index',
+    description: 'Pure BM25 full-text index search. Best for exact keyword or name lookups.',
+    color: 'amber',
+    activeClass: 'bg-amber-500/20 border-amber-500/50 text-amber-300',
+  },
+  {
+    mode: 'vector',
+    label: 'Vector Search',
+    shortLabel: 'Vector',
+    description: 'Pure semantic/vector search. Best for conceptual or meaning-based queries.',
+    color: 'emerald',
+    activeClass: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300',
+  },
+];
+
+const MODE_PILL_CLASS: Record<SearchMode, string> = {
+  hybrid: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
+  bm25: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+  vector: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+};
+
+const MODE_DOT_CLASS: Record<SearchMode, string> = {
+  hybrid: 'bg-indigo-400',
+  bm25: 'bg-amber-400',
+  vector: 'bg-emerald-400',
+};
+
+// ─── Search Settings Panel ────────────────────────────────────────────────────
+
+function SearchSettingsPanel({
+  settings,
+  onChange,
+  onClose,
+}: {
+  settings: ChatSearchSettings;
+  onChange: (s: ChatSearchSettings) => void;
+  onClose: () => void;
+}) {
+  const bm25Pct = Math.round(settings.bm25Weight * 100);
+  const vecPct = Math.round(settings.vectorWeight * 100);
+  const isHybrid = settings.searchMode === 'hybrid';
+
+  function handleSlider(e: React.ChangeEvent<HTMLInputElement>) {
+    const bm25 = Number(e.target.value) / 100;
+    onChange({ ...settings, bm25Weight: bm25, vectorWeight: +(1 - bm25).toFixed(2) });
+  }
+
+  function selectMode(mode: SearchMode) {
+    onChange({ ...settings, searchMode: mode });
+  }
+
+  return (
+    <div className="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-4 text-sm backdrop-blur-sm shadow-xl">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="w-4 h-4 text-slate-400" />
+          <span className="font-semibold text-slate-200 text-sm">Search Mode Settings</span>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors"
+          aria-label="Close settings"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Mode selector */}
+      <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-2">Search Strategy</p>
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        {SEARCH_MODES.map(({ mode, shortLabel, description, activeClass }) => (
+          <button
+            key={mode}
+            onClick={() => selectMode(mode)}
+            title={description}
+            className={`rounded-xl border px-3 py-2.5 text-xs font-medium transition-all duration-200 text-center ${
+              settings.searchMode === mode
+                ? activeClass
+                : 'border-slate-700/50 text-slate-500 hover:border-slate-600/60 hover:text-slate-400 bg-slate-800/40'
+            }`}
+          >
+            {shortLabel}
+            {settings.searchMode === mode && (
+              <span className="block text-[9px] mt-0.5 opacity-70">Active</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Mode description */}
+      <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+        {SEARCH_MODES.find((m) => m.mode === settings.searchMode)?.description}
+      </p>
+
+      {/* Weight slider — only visible in hybrid mode */}
+      {isHybrid && (
+        <div>
+          <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-3">
+            Weight Distribution (Hybrid only)
+          </p>
+
+          {/* Weight labels */}
+          <div className="flex justify-between text-xs mb-1.5">
+            <span className="text-amber-400 font-medium">Index (BM25) {bm25Pct}%</span>
+            <span className="text-emerald-400 font-medium">{vecPct}% Vector</span>
+          </div>
+
+          {/* Slider */}
+          <div className="relative mb-3">
+            {/* Gradient track */}
+            <div className="h-2 rounded-full overflow-hidden mb-1"
+              style={{
+                background: `linear-gradient(to right, #f59e0b ${bm25Pct}%, #10b981 ${bm25Pct}%)`
+              }}
+            />
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={bm25Pct}
+              onChange={handleSlider}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer h-2"
+              aria-label="BM25 vs Vector weight"
+            />
+          </div>
+
+          {/* Preset buttons */}
+          <div className="flex gap-2 flex-wrap">
+            {[
+              { label: 'Index Heavy (80/20)', b: 0.8 },
+              { label: 'Balanced (50/50)', b: 0.5 },
+              { label: 'Vector Heavy (20/80)', b: 0.2 },
+            ].map(({ label, b }) => (
+              <button
+                key={label}
+                onClick={() => onChange({ ...settings, bm25Weight: b, vectorWeight: +(1 - b).toFixed(2) })}
+                className={`text-[10px] px-2.5 py-1 rounded-lg border transition-colors ${
+                  settings.bm25Weight === b
+                    ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
+                    : 'border-slate-700/50 text-slate-500 hover:border-slate-600/60 hover:text-slate-400'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
@@ -132,8 +306,16 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [searchSettings, setSearchSettings] = useState<ChatSearchSettings>({
+    searchMode: 'hybrid',
+    bm25Weight: 0.4,
+    vectorWeight: 0.6,
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const settingsPanelRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when messages update
   useEffect(() => {
@@ -147,6 +329,21 @@ export default function ChatPage() {
       textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
     }
   }, [input]);
+
+  // Close settings panel when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        showSettings &&
+        settingsPanelRef.current &&
+        !settingsPanelRef.current.contains(e.target as Node)
+      ) {
+        setShowSettings(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSettings]);
 
   const buildHistory = useCallback((): ChatHistoryEntry[] => {
     return messages
@@ -178,7 +375,7 @@ export default function ChatPage() {
           { role: 'user', content: trimmed },
         ];
 
-        const response = await chatApi.sendMessage(trimmed, fullHistory.slice(0, -1));
+        const response = await chatApi.sendMessage(trimmed, fullHistory.slice(0, -1), searchSettings);
 
         const aiMsg: ChatMessage = {
           id: crypto.randomUUID(),
@@ -203,7 +400,7 @@ export default function ChatPage() {
         setTimeout(() => textareaRef.current?.focus(), 50);
       }
     },
-    [isLoading, buildHistory]
+    [isLoading, buildHistory, searchSettings]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -214,6 +411,7 @@ export default function ChatPage() {
   };
 
   const isEmpty = messages.length === 0;
+  const currentModeMeta = SEARCH_MODES.find((m) => m.mode === searchSettings.searchMode)!;
 
   return (
     <AppShell>
@@ -230,9 +428,46 @@ export default function ChatPage() {
                 Query your panel evaluation data using natural language
               </p>
             </div>
-            <div className="ml-auto flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Hybrid Search Active
+            <div className="ml-auto flex items-center gap-2">
+              {/* Search mode status pill */}
+              <div
+                className={`flex items-center gap-1.5 text-xs border rounded-full px-3 py-1 ${MODE_PILL_CLASS[searchSettings.searchMode]}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${MODE_DOT_CLASS[searchSettings.searchMode]}`} />
+                {currentModeMeta.label}
+                {searchSettings.searchMode === 'hybrid' && (
+                  <span className="opacity-70 ml-0.5">
+                    · {Math.round(searchSettings.bm25Weight * 100)}% / {Math.round(searchSettings.vectorWeight * 100)}%
+                  </span>
+                )}
+              </div>
+
+              {/* Settings toggle */}
+              <div className="relative" ref={settingsPanelRef}>
+                <button
+                  onClick={() => setShowSettings((p) => !p)}
+                  className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-all duration-200 ${
+                    showSettings
+                      ? 'bg-slate-700/80 border-slate-600/60 text-slate-200'
+                      : 'border-slate-700/50 text-slate-500 hover:border-slate-600/60 hover:text-slate-300 hover:bg-slate-700/40'
+                  }`}
+                  aria-label="Search settings"
+                  title="Configure search mode"
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                </button>
+
+                {/* Settings dropdown */}
+                {showSettings && (
+                  <div className="absolute right-0 top-full mt-2 w-80 z-50">
+                    <SearchSettingsPanel
+                      settings={searchSettings}
+                      onChange={setSearchSettings}
+                      onClose={() => setShowSettings(false)}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -252,7 +487,7 @@ export default function ChatPage() {
                 </h2>
                 <p className="text-slate-400 text-sm mb-8 max-w-sm">
                   Ask anything about your panel evaluations, candidate results, or
-                  interviewer performance. Powered by hybrid semantic search.
+                  interviewer performance. Use the <SlidersHorizontal className="inline w-3.5 h-3.5 mx-0.5 text-slate-400" /> settings to control the search strategy.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-2xl">
                   {STARTER_QUESTIONS.map((q) => (
@@ -307,7 +542,7 @@ export default function ChatPage() {
               </button>
             </div>
             <p className="text-[10px] text-slate-600 text-center mt-2">
-              Enter to send · Shift+Enter for new line · Responses use live panel evaluation data
+              Enter to send · Shift+Enter for new line · Click <SlidersHorizontal className="inline w-3 h-3 mx-0.5" /> to change search strategy
             </p>
           </div>
         </div>
@@ -315,3 +550,5 @@ export default function ChatPage() {
     </AppShell>
   );
 }
+
+

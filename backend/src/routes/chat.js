@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { searchHybrid } = require('../services/searchService');
+const { searchHybrid, searchBM25 } = require('../services/searchService');
 const { searchVector } = require('../services/vectorSearchService');
 const https = require('https');
 
@@ -130,7 +130,13 @@ function formatContextFromResults(results) {
  */
 router.post('/', async (req, res) => {
   try {
-    const { message, history = [] } = req.body;
+    const {
+      message,
+      history = [],
+      searchMode = 'hybrid',    // 'hybrid' | 'bm25' | 'vector'
+      bm25Weight = 0.4,
+      vectorWeight = 0.6,
+    } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({
@@ -146,42 +152,82 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const trimmedMessage = message.trim();
-    console.log(`[Chat] Incoming message: "${trimmedMessage.substring(0, 80)}"`);
+    // Clamp weights to valid range
+    const safeB = Math.max(0, Math.min(1, Number(bm25Weight) || 0.4));
+    const safeV = Math.max(0, Math.min(1, Number(vectorWeight) || 0.6));
+    const validMode = ['hybrid', 'bm25', 'vector'].includes(searchMode) ? searchMode : 'hybrid';
 
-    // Step 1: Hybrid search to retrieve relevant panel data
+    const trimmedMessage = message.trim();
+    console.log(`[Chat] mode=${validMode} bm25=${safeB} vector=${safeV} msg="${trimmedMessage.substring(0, 80)}"`);
+
+    // Step 1: Run search based on chosen mode
     let searchResults = [];
     let searchQuery = trimmedMessage;
     let sources = [];
 
     try {
-      const hybridResult = await searchHybrid(trimmedMessage, {
-        limit: 10,
-        skip: 0,
-        bm25Weight: 0.4,
-        vectorWeight: 0.6,
-        vectorMinScore: 0.25,
-      });
+      if (validMode === 'bm25') {
+        // Pure BM25 / index-based search
+        const bm25Result = await searchBM25(trimmedMessage, {
+          limit: 10,
+          skip: 0,
+        });
+        searchResults = bm25Result.results || [];
+        sources = searchResults.slice(0, 5).map((r) => ({
+          job_interview_id: r.job_interview_id || null,
+          candidate_name: r.candidate_name || null,
+          panel_member_name: r.panel_member_name || null,
+          field_type: r.field_type || null,
+          relevance: r.score || null,
+        }));
+        console.log(`[Chat] BM25 search returned ${searchResults.length} results`);
 
-      searchResults = hybridResult.results || [];
-      sources = searchResults.slice(0, 5).map((r) => ({
-        job_interview_id: r.job_interview_id || null,
-        candidate_name: r.candidate_name || null,
-        panel_member_name: r.panel_member_name || null,
-        field_type: r.field_type || null,
-        relevance: r.hybrid_score || r.score || null,
-      }));
+      } else if (validMode === 'vector') {
+        // Pure vector / semantic search
+        const vectorResult = await searchVector(trimmedMessage, {
+          limit: 10,
+          skip: 0,
+          minScore: 0.20,
+        });
+        searchResults = vectorResult.results || [];
+        sources = searchResults.slice(0, 5).map((r) => ({
+          job_interview_id: r.job_interview_id || null,
+          candidate_name: r.candidate_name || null,
+          panel_member_name: r.panel_member_name || null,
+          field_type: r.field_type || null,
+          relevance: r.similarity || r.score || null,
+        }));
+        console.log(`[Chat] Vector search returned ${searchResults.length} results`);
 
-      console.log(`[Chat] Hybrid search returned ${searchResults.length} results`);
+      } else {
+        // Hybrid search (default) — use caller-supplied weights
+        const hybridResult = await searchHybrid(trimmedMessage, {
+          limit: 10,
+          skip: 0,
+          bm25Weight: safeB,
+          vectorWeight: safeV,
+          vectorMinScore: 0.20,
+        });
+        searchResults = hybridResult.results || [];
+        sources = searchResults.slice(0, 5).map((r) => ({
+          job_interview_id: r.job_interview_id || null,
+          candidate_name: r.candidate_name || null,
+          panel_member_name: r.panel_member_name || null,
+          field_type: r.field_type || null,
+          relevance: r.hybrid_score || r.score || null,
+        }));
+        console.log(`[Chat] Hybrid search returned ${searchResults.length} results`);
+      }
+
     } catch (searchErr) {
-      console.warn('[Chat] Hybrid search failed, falling back to vector search:', searchErr.message);
+      console.warn(`[Chat] ${validMode} search failed, falling back to vector search:`, searchErr.message);
 
       // Fallback: vector-only search
       try {
         const vectorResult = await searchVector(trimmedMessage, {
           limit: 8,
           skip: 0,
-          minScore: 0.25,
+          minScore: 0.20,
         });
         searchResults = vectorResult.results || [];
         sources = searchResults.slice(0, 5).map((r) => ({
@@ -200,6 +246,7 @@ router.post('/', async (req, res) => {
 
     // Step 2: Format context from search results
     const contextBlock = formatContextFromResults(searchResults);
+    const modeLabel = validMode === 'bm25' ? 'BM25 index' : validMode === 'vector' ? 'vector semantic' : 'hybrid';
 
     // Step 3: Build message array for GROQ
     // Keep last 10 turns of history to stay within token limits
@@ -209,7 +256,7 @@ router.post('/', async (req, res) => {
       { role: 'system', content: CHAT_SYSTEM_PROMPT },
       {
         role: 'user',
-        content: `PANEL DATA CONTEXT (from hybrid search):\n${contextBlock}`,
+        content: `PANEL DATA CONTEXT (from ${modeLabel} search):\n${contextBlock}`,
       },
       {
         role: 'assistant',
@@ -234,6 +281,7 @@ router.post('/', async (req, res) => {
       reply,
       sources,
       searchQuery,
+      searchMode: validMode,
       resultCount: searchResults.length,
       timestamp: new Date().toISOString(),
     });
