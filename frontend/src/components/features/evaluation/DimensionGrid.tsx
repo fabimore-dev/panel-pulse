@@ -52,6 +52,7 @@ export function DimensionGrid({ dimensions, evidence }: Props) {
             score={score}
             maxScore={def.maxScore}
             evidence={ev}
+            colour={def.colour}
           />
         );
       })}

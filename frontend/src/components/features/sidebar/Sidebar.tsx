@@ -1,6 +1,7 @@
 import { BrandSection } from './BrandSection';
 import { NavigationMenu } from './NavigationMenu';
 import { SettingsButton } from './SettingsButton';
+import { IndiumLogo } from './IndiumLogo';
 
 export function Sidebar() {
   return (
@@ -19,9 +20,9 @@ export function Sidebar() {
         <SettingsButton />
       </div>
 
-      {/* Footer */}
-      <footer className="text-xs text-text-muted pt-4 text-center">
-        <p>© 2026 Panel Pulse</p>
+      {/* Footer — Indium branding */}
+      <footer className="pt-4 flex justify-center">
+        <IndiumLogo className="w-28 opacity-60 hover:opacity-90 transition-opacity" />
       </footer>
     </aside>
   );

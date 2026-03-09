@@ -51,7 +51,7 @@ export function ExportButton({
           <p class="meta"><strong>Job ID:</strong> ${jobId}</p>
           ${panelName ? `<p class="meta"><strong>Panel:</strong> ${panelName}</p>` : ''}
           ${candidateName ? `<p class="meta"><strong>Candidate:</strong> ${candidateName}</p>` : ''}
-          <p class="meta"><strong>Panel Score:</strong> ${Number(effectiveScore ?? 0).toFixed(1)} / 11.0</p>
+          <p class="meta"><strong>Panel Score:</strong> ${Number(effectiveScore ?? 0).toFixed(1)} / 10.0</p>
           <h2>Dimension Breakdown</h2>
           <table>
             <thead><tr><th>Dimension</th><th>Score</th></tr></thead>

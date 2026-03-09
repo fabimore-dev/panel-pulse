@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ProgressRing } from './ProgressRing';
 import { dashboardApi } from '@/lib/api/dashboard.api';
 
-const MAX_SCORE = 11.0;
+const MAX_SCORE = 10.0;
 
 interface Props {
   score: number;
