@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { apiClient } from '@/lib/api/client';
 import toast from 'react-hot-toast';
+import { useEvaluationStore } from '@/lib/stores/evaluation.store';
 
 export interface L2ValidationResult {
   probingDepth: 'NO PROBING' | 'SURFACE PROBING' | 'DEEP PROBING';
@@ -71,6 +72,8 @@ export function useL2Validation() {
       // Transform backend response to frontend format
       const transformedResult = transformBackendResponse(response.data);
       setResult(transformedResult);
+      // Persist to store so ExportButton can include it in the PDF
+      useEvaluationStore.getState().setL2Validation(transformedResult);
       return transformedResult;
     } catch (err: any) {
       const raw = err.response?.data?.error || err.message || 'Failed to validate L2 reason';

@@ -114,9 +114,18 @@ export function ExportButton({
       : '';
 
     // L2 rejection reasons + probing verdict
-    const l2Reasons: string[] = evaluationData?.l2RejectionReasons ?? [];
-    const l2Val = evaluationData?.l2Validation ?? {};
-    const probingRaw: string = l2Val?.probing_verdict ?? '';
+    // Falls back to Zustand store values for fresh evaluations or old cached records
+    const l2Reasons: string[] =
+      (evaluationData?.l2RejectionReasons?.length ?? 0) > 0
+        ? evaluationData.l2RejectionReasons
+        : store.l2RejectionReason ? [store.l2RejectionReason] : [];
+    const storeL2 = store.l2ValidationResult;
+    const l2Val = evaluationData?.l2Validation ?? storeL2 ?? {};
+    // Handle both DB format (probing_verdict) and live-hook format (probingDepth)
+    const probingRaw: string =
+      l2Val?.probing_verdict
+      ?? (l2Val?.probingDepth ? String(l2Val.probingDepth).replace(/ /g, '_').toUpperCase() : '')
+      ?? '';
     const probingLabel = probingRaw
       ? probingRaw.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
       : '';
