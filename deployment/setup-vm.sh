@@ -94,11 +94,24 @@ npm run build
 echo ""
 echo "▶ [8/8] Starting backend via PM2..."
 mkdir -p "$LOG_DIR"
+# Transfer full ownership to the deploy user so future deploys run without sudo
+chown -R indium:indium "$APP_DIR"
 chown -R indium:indium "$LOG_DIR"
 cd "$APP_DIR"
 pm2 delete panel-pulse-backend 2>/dev/null || true
 pm2 start deployment/ecosystem.config.js --env production
 pm2 save
+
+# ── Allow indium to remove the frontend dist dir without a password ─────────
+# This lets deploy.sh clear root-owned build artifacts without requireing
+# interactive sudo (deploy runs non-interactively as indium).
+DEPLOY_SUDOERS="/etc/sudoers.d/panel-pulse-deploy"
+printf '%s\n' \
+    "indium ALL=(root) NOPASSWD: /usr/bin/rm -rf /opt/panel-pulse/frontend/dist" \
+    "indium ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx" \
+    > "$DEPLOY_SUDOERS"
+chmod 440 "$DEPLOY_SUDOERS"
+echo "   ✅ sudoers rule written: $DEPLOY_SUDOERS"
 
 # ── 8. nginx ────────────────────────────────────────────────
 echo ""

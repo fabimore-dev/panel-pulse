@@ -28,6 +28,9 @@ npm install --omit=dev
 echo ""
 echo "▶ [3/4] Building frontend..."
 cd "$APP_DIR/frontend"
+# Remove stale dist — may be owned by root if a previous deploy ran as sudo.
+# The sudoers.d/panel-pulse-deploy rule grants indium passwordless access to this exact command.
+sudo rm -rf "$APP_DIR/frontend/dist"
 # Ensure production env is set (safe to re-write on every deploy)
 echo "VITE_API_BASE_URL=http://10.10.142.91"  > .env.production
 echo "VITE_APP_NAME=Panel Pulse AI"          >> .env.production
@@ -35,12 +38,13 @@ echo "VITE_ENABLE_MOCK=false"                >> .env.production
 npm install
 npm run build
 
-# ── Restart backend ──────────────────────────────────────────
+# ── Restart backend + reload nginx ──────────────────────────
 echo ""
-echo "▶ [4/4] Restarting backend via PM2..."
+echo "▶ [4/4] Restarting backend via PM2 and reloading nginx..."
 cd "$APP_DIR"
 pm2 restart panel-pulse-backend --update-env
 pm2 save
+sudo systemctl reload nginx
 
 echo ""
 echo "========================================"
