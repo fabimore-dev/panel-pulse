@@ -9,6 +9,18 @@ import { Send, Bot, User, Sparkles, ChevronDown, ChevronUp, Zap, SlidersHorizont
 
 // ─── Starter questions ───────────────────────────────────────────────────────
 
+// crypto.randomUUID() requires a secure context (HTTPS/localhost).
+// http://10.10.142.91 is not secure, so we need a fallback for production HTTP.
+function genId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    try { return crypto.randomUUID(); } catch (_) { /* fall through */ }
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 const STARTER_QUESTIONS = [
   'Which panel member is most suited for Python-based interviews?',
   'Show me panels with the highest Mandatory Skill Coverage score.',
@@ -402,7 +414,7 @@ export default function ChatPage() {
 
       // Append user message
       const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: genId(),
         role: 'user',
         content: trimmed,
         timestamp: new Date(),
@@ -422,7 +434,7 @@ export default function ChatPage() {
         const response = await chatApi.sendMessage(trimmed, fullHistory.slice(0, -1), searchSettings);
 
         const aiMsg: ChatMessage = {
-          id: crypto.randomUUID(),
+          id: genId(),
           role: 'assistant',
           content: response.reply,
           timestamp: new Date(),
@@ -431,7 +443,7 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, aiMsg]);
       } catch (err: any) {
         const errMsg: ChatMessage = {
-          id: crypto.randomUUID(),
+          id: genId(),
           role: 'assistant',
           content:
             '⚠️ Sorry, I encountered an error retrieving data. Please try again in a moment.',
