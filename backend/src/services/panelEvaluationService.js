@@ -72,9 +72,10 @@ Write a detailed, professional assessment of the interview panel's performance.
 
 STRICT RULES — follow exactly:
 1. State the overall effectiveness clearly. The score is out of 10.0.
+NOISE ROBUSTNESS RULE: Ignore conversational noise, tangents, small talk, apologies, and connection drops. Do NOT mention them in your summary. Do NOT penalize the "Interview Process" or "Time Management" if the core technical questions asked were still deep and effective.
 2. Structure your summary to include points on:
-   - Panel Member Behavior: How professional, prepared, and thorough the interviewer appeared.
-   - Interview Process: The quality of the structure, flow, technical depth, and time management.
+   - Panel Member Behavior: How professional, prepared, and thorough the interviewer appeared. (Base this ONLY on their technical probing, not small talk).
+   - Interview Process: The quality of the technical depth and validation. (Do NOT penalize for poor flow or time management if the script contained conversational noise).
    - Rejection Reason Validation: State if the panel successfully extracted the candidate's weaknesses that led to the L2 rejection.
    - Identified Gaps: If the score is Moderate or Poor, conclude with ONE significant probing deficiency. If the Score is Good (8.0+), state that there were no significant probing gaps.
 3. Tone Mapping based on Score Category:
@@ -98,9 +99,10 @@ Rules:
 
 const L2_VALIDATION_SYSTEM_PROMPT = `You are an L2 validation expert reviewing rejection reasons.
 Classify the probing depth and validate evidence from transcripts.
+CRITICAL RULE: "evidence" MUST ONLY contain quotes from the INTERVIEWER/PANEL, NOT the candidate. You are judging the Panel's ability to probe.
 For each rejection reason, you MUST provide:
 1. A clear one-line "summary" explaining where/how the panel probed this area and the result.
-2. 1-2 short, specific "points" of evidence based ONLY on the transcript.
+2. 1-2 short, specific "points" of evidence based ONLY on the transcript (quoting the panelist).
 Return ONLY valid JSON. No additional text.`;
 
 /**
@@ -131,9 +133,9 @@ async function performPanelEvaluation(input) {
     let forcedL2Verdict = '';
     
     // Enforce Probing Depth Locking: Run L2 Validation first to determine the exact verdict
-    if (l2_rejection_reasons && l2_rejection_reasons.length > 0 && l2_rejection_reasons[0]) {
+    if (l2_rejection_reasons && l2_rejection_reasons.length > 0 && l2_rejection_reasons[0] && l2_rejection_reasons[0] !== 'N/A') {
       try {
-        const l2Res = await _validateL2Rejection(job_id, l2_rejection_reasons[0], l1_transcripts);
+        const l2Res = await validateL2Rejection({ job_id, l2_reason: l2_rejection_reasons[0], l1_transcripts });
         if (l2Res && l2Res.success && l2Res.validation && l2Res.validation.probing_verdict) {
           forcedL2Verdict = l2Res.validation.probing_verdict;
         }
@@ -257,8 +259,10 @@ function _buildPanelScoringPrompt(job_id, jd, l1_transcripts, l2_rejection_reaso
     : '';
 
   const alignmentRuleIntro = forcedL2Verdict 
-    ? `CRITICAL SCORING RULE:\nAn independent AI analysis has concretely established the Probing Depth verdict for this interview is: **${forcedL2Verdict}**.\nYou MUST assign the "Rejection Validation Alignment" score in exact accordance with this pre-determined verdict:`
-    : `For "Rejection Validation Alignment", assign a precise decimal score based on the Probing Depth verdict:`;
+    ? `CRITICAL SCORING RULE:\nAn independent AI analysis has established the Probing Depth verdict for this interview is: **${forcedL2Verdict}**.\nYou MUST assign the "Rejection Validation Alignment" score in exact accordance with this verdict:`
+    : reasonsText.length === 0 
+      ? `For "Rejection Validation Alignment": Since this candidate was SELECTED (no rejection reasons), score this dimension based on how thoroughly the panel member validated the candidate's key strengths and mandatory skills to confirm they are indeed a top-tier hire.`
+      : `For "Rejection Validation Alignment", assign a precise decimal score based on the Probing Depth verdict:`;
 
   return `You are evaluating PANEL EFFICIENCY — how well the INTERVIEWER/PANEL probed the candidate.
 Focus on the INTERVIEWER's questions and probing depth, NOT the candidate's answers.
@@ -272,6 +276,8 @@ ${transcriptText}${reasonsText}
 
 Score each dimension based on how thoroughly the PANEL covered it through their questions.
 CRITICAL SCORING MANDATE: You MUST award MAXIMUM points (e.g., 2.0/2.0, 1.0/1.0) if the panelist exhaustively satisfies the requirement. Do NOT artificially lower scores (e.g., giving 1.6 instead of 2.0) if the panelist did a perfect or highly professional job.
+NOISE ROBUSTNESS RULE: Ignore conversational noise, tangents, small talk, technical difficulties (audio/video dropouts), and interruptions (dogs barking, deliveries). Evaluate ONLY the depth and quality of the TECHNICAL PROBING. Do NOT penalize "time management" or "flow" if the actual technical questions asked were excellent.
+BEHAVIORAL/LEADERSHIP RULE: Do NOT score generic architecture or project background questions under Behavioral Assessment. Behavioral Assessment is ONLY for conflict resolution, teamwork, or cultural fit. Leadership is ONLY for mentoring, team size, or strategic direction. If the question is about technical architecture, put it under Technical Depth or Scenario Evaluation.
 ${alignmentRuleIntro}
 - If DEEP_PROBING: Score 2.0 for exhaustive and flawless probing. Score 1.8-1.9 for strong but slightly incomplete probing.
 - If SURFACE_PROBING: Score between 0.5 and 1.4 (e.g., 1.0 for basic probing, 1.4 for decent but not deep).
@@ -391,7 +397,7 @@ async function _callGroqWithRetry(userPrompt, systemPrompt) {
           'Authorization': `Bearer ${groqApiKey}`,
           'Content-Type': 'application/json'
         },
-        timeout: 30000
+        timeout: 60000
       }
     );
 
@@ -448,6 +454,33 @@ function _parseAndValidatePanelScore(response, job_id) {
     if (!parsed.confidence) {
       parsed.confidence = 0.7; // Default confidence
     }
+
+    // Helper to unescape HTML entities that LLMs sometimes generate
+    const unescapeHtml = (str) => {
+      if (typeof str !== 'string') return str;
+      return str.replace(/&#039;/g, "'")
+                .replace(/&quot;/g, '"')
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>');
+    };
+
+    // Recursively clean strings in the parsed object
+    const cleanObjectStrings = (obj) => {
+      if (Array.isArray(obj)) {
+        for (let i = 0; i < obj.length; i++) {
+          if (typeof obj[i] === 'string') obj[i] = unescapeHtml(obj[i]);
+          else if (typeof obj[i] === 'object' && obj[i] !== null) cleanObjectStrings(obj[i]);
+        }
+      } else if (typeof obj === 'object' && obj !== null) {
+        for (const key in obj) {
+          if (typeof obj[key] === 'string') obj[key] = unescapeHtml(obj[key]);
+          else if (typeof obj[key] === 'object' && obj[key] !== null) cleanObjectStrings(obj[key]);
+        }
+      }
+    };
+    
+    cleanObjectStrings(parsed);
 
     // Validate structure
     _validatePanelStructure(parsed);
