@@ -47,7 +47,9 @@ echo "▶ [4/4] Restarting backend via PM2 and reloading nginx..."
 cd "$APP_DIR"
 pm2 restart panel-pulse-backend --update-env
 pm2 save
-sudo systemctl reload nginx
+# Update nginx config from repo and reload so header changes take effect
+sudo cp "$APP_DIR/deployment/nginx.conf" /etc/nginx/sites-available/panel-pulse
+sudo nginx -t && sudo systemctl reload nginx
 
 echo ""
 echo "========================================"
