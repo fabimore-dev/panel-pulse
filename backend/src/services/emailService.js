@@ -1,40 +1,37 @@
 /**
- * Email Service — Nodemailer
+ * Email Service — Resend
  *
  * Configure via environment variables:
- *   SMTP_HOST     SMTP server hostname  (e.g. smtp.office365.com)
- *   SMTP_PORT     SMTP port             (default 587)
- *   SMTP_SECURE   'true' for port 465, 'false' for STARTTLS (default false)
- *   SMTP_USER     Sender email / auth user
- *   SMTP_PASS     SMTP password / app password
- *   SMTP_FROM     "From" display name + address (default: SMTP_USER)
+ *   RESEND_API_KEY   Resend API key (from resend.com dashboard)
+ *   SMTP_FROM        "From" address  (e.g. "Panel Pulse AI <no-reply@indium.tech>")
+ *
+ * In development (when RESEND_API_KEY is not set), OTPs are printed to the console.
  */
 
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-let transporter;
+let resendClient;
 
-function getTransporter() {
-  if (transporter) return transporter;
-
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
-  return transporter;
+function getResendClient() {
+  if (!resendClient) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
 }
 
 /**
  * Send a 6-digit OTP to the given @indium.tech email address.
  */
 async function sendOtpEmail(to, code) {
-  const from = process.env.SMTP_FROM || `Panel Pulse AI <${process.env.SMTP_USER}>`;
+  // In development (or when Resend is not configured), print the OTP to the console.
+  if (!process.env.RESEND_API_KEY) {
+    console.log('\n========================================');
+    console.log(`  [DEV] OTP for ${to}: ${code}`);
+    console.log('========================================\n');
+    return;
+  }
+
+  const from = process.env.SMTP_FROM || 'Panel Pulse AI <no-reply@indium.tech>';
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -72,13 +69,17 @@ async function sendOtpEmail(to, code) {
     </div>
   `;
 
-  await getTransporter().sendMail({
+  const { error } = await getResendClient().emails.send({
     from,
     to,
     subject: `${code} — Your Panel Pulse AI sign-in code`,
     text: `Your Panel Pulse AI sign-in code is: ${code}\n\nThis code expires in 10 minutes and can only be used once.`,
     html,
   });
+
+  if (error) {
+    throw new Error(`Resend delivery failed: ${error.message}`);
+  }
 }
 
 module.exports = { sendOtpEmail };
