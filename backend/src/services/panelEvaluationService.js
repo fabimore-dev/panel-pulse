@@ -77,10 +77,10 @@ NOISE ROBUSTNESS RULE: Ignore conversational noise, tangents, small talk, apolog
    - Panel Member Behavior: How professional, prepared, and thorough the interviewer appeared. (Base this ONLY on their technical probing, not small talk).
    - Interview Process: The quality of the technical depth and validation. (Do NOT penalize for poor flow or time management if the script contained conversational noise).
    - Rejection Reason Validation: State if the panel successfully extracted the candidate's weaknesses that led to the L2 rejection.
-   - Identified Gaps: If the score is Moderate or Poor, conclude with ONE significant probing deficiency. If the Score is Good (8.0+), state that there were no significant probing gaps.
-3. Tone Mapping based on Score Category:
-   - For "Good" (8.0-10.0): The summary must be highly positive, praising the panelist's deep probing, excellent structure, and thorough technical validation.
-   - For "Moderate" or "Poor": Focus on critical gaps and missed opportunities.
+   - Identified Gaps: If the Probing Depth verdict is 'DEEP_PROBING', state that there were no significant probing gaps. Only conclude with a probing deficiency for 'SURFACE_PROBING' or 'NO_PROBING' verdicts.
+3. Tone Mapping based on Verdict/Score:
+   - For "DEEP_PROBING" verdict OR Score >= 8.0: Highly positive summary praising technical validation.
+   - For SURFACE/NO probing verdicts AND Score < 8.0: Focus on critical gaps and missed opportunities.
 4. Format as a markdown bulleted list (using '-'). No intro or outro text. Keep it professional and high-level.
 5. Use highly formal, definitive business English. State facts directly.`;
 
