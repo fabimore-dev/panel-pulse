@@ -74,10 +74,11 @@ router.post('/request-otp', async (req, res) => {
     console.warn(`[Auth] Bypass enabled: OTP for ${email} is ${code}`);
   }
 
-  const responseData = { 
-    message: 'Code sent. Check your terminal/email.',
-    otp: code // Return OTP regardless of environment for demo/testing
-  };
+  const responseData = { message: 'Code sent. Check your terminal/email.' };
+  // Return OTP in response when: not production, or SHOW_OTP_IN_RESPONSE=true (temp workaround for unverified domain)
+  if (process.env.NODE_ENV !== 'production' || process.env.SHOW_OTP_IN_RESPONSE === 'true') {
+    responseData.otp = code;
+  }
   return res.json(responseData);
 });
 
@@ -108,10 +109,12 @@ router.post('/verify-otp', async (req, res) => {
   // Issue JWT
   const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: SESSION_DURATION });
 
+  // COOKIE_SECURE=false overrides the default so HTTP-only VMs work in production mode
+  const secureCookie = process.env.COOKIE_SECURE !== 'false' && IS_PROD;
   res.cookie('pp_token', token, {
     httpOnly: true,
-    secure: IS_PROD,   // true in prod (required for sameSite: 'none')
-    sameSite: IS_PROD ? 'none' : 'lax', // 'none' for cross-domain prod, 'lax' for local dev
+    secure: secureCookie,
+    sameSite: 'lax',
     maxAge: COOKIE_MAX_AGE_MS,
     path: '/',
   });
