@@ -177,7 +177,7 @@ export default function LoginPage() {
               <div>
                 <h2 className="text-lg font-semibold text-text-primary mb-1">Sign in</h2>
                 <p className="text-sm text-text-muted">
-                  Enter your <span className="text-text-secondary font-medium">@indium.tech</span> email address.
+                  Enter your <span className="text-text-secondary font-medium">INDIUM</span> email address.
                   We'll send you a one-time code.
                 </p>
               </div>
@@ -193,7 +193,7 @@ export default function LoginPage() {
                     type="email"
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                    placeholder="you@indium.tech"
+                    placeholder="john.doe@indium.tech"
                     autoComplete="email"
                     autoFocus
                     required
@@ -312,9 +312,6 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="text-center text-xs text-text-muted mt-6">
-          Session expires after 8 hours of inactivity.
-        </p>
       </div>
     </div>
   );

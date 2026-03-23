@@ -80,6 +80,7 @@ apiClient.interceptors.response.use(
       const statusCode = error.response.status;
       const message = (error.response.data as any)?.error || 'An error occurred';
       if (statusCode === 404) toast.error(`Not found: ${message}`);
+      else if (statusCode === 401) { /* 401 handled in-page, no global toast */ }
       else if (statusCode === 500) toast.error('Server error. Please try again later.');
       else if (statusCode !== 429) toast.error(message);
     } else if (error.request) {
