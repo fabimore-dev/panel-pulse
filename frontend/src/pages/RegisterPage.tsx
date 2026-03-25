@@ -12,7 +12,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api/client';
-import TermsModal from '@/components/auth/TermsModal';
+import TermsModal from '../components/auth/TermsModal';
 
 const ALLOWED_DOMAIN = '@indium.tech';
 
