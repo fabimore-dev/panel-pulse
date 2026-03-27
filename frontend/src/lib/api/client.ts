@@ -13,7 +13,7 @@ export { API_BASE_URL };
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000,
+  timeout: 300000,  // 5 min — LLM evaluation runs multiple sequential calls and can be slow
   withCredentials: true,   // send httpOnly cookie on every request
   headers: { 'Content-Type': 'application/json' },
 });

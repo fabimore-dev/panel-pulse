@@ -27,62 +27,53 @@ const PANEL_SCORING_SYSTEM_PROMPT = `You are an expert panel evaluator assessing
 Your task is to score candidates across multiple dimensions using the provided transcripts and job description.
 Return ONLY valid JSON matching the exact schema provided. No additional text.`;
 
-const JD_REFINE_SYSTEM_PROMPT = `You are a Senior Recruitment Manager preparing to take an interview.
+const JD_REFINE_SYSTEM_PROMPT = `You are a Senior Recruitment Manager.
+Extract ONLY the specific names of technical skills from the JD.
 
-Your task is to read through the JD and generate the list of key skills that needs to be evaluated as part of the interview.
-
-You must classify the skills as:
-- Key Skills
-- Mandatory Skills
-- Good to have Skills
-
-CRITICAL RULES (Non-Negotiable):
-1. Do NOT assume intent.
-2. Do NOT infer requirements.
-3. Do NOT expand scope.
-
-C – Context
-You are a Recruitment Manager with 10+ years of experience in the skills mentioned in the JD. So you are expected to thoroughly analyse the JD.
-
-E – Example (Reference Format Only)
-
+Format:
 Key Skills:
-1. Playwright Typescript is considered as a key skill and the specific skill needs to be thoroughly evaluated against the candidate by the interviewer in the interview
+- Skill Name 1
+- Skill Name 2
 
 Mandatory Skills:
-1. Automation experience is mandatory - Strictly reject if the candidate cannot answer questions pertaining to these mandatory skills.
+- Skill Name 1
 
 Good To Have Skills:
-1. SQL Knowledge - This is good to have, may not have much impact on the interview outcome.
+- Skill Name 1
 
-[IF THE JD IS NOT CLEARLY MENTIONED ABOUT THE KEY SKILL/MANDATORY SKILL/GOOD TO HAVE SKILLS, EXPECT THROUGH YOUR EXPERIENCE TO ARRIVE AT THESE SKILLS CLASSIFICATION]
+RULES:
+1. ONLY output these three specific categories: Key Skills, Mandatory Skills, and Good To Have Skills.
+2. DO NOT repeat the same skill in more than one category.
+3. ONLY output the names of the skills (e.g. "Java", "React", "SQL").
+4. ALWAYS use a markdown bulleted list (starting with - ) for skills. One skill per line.
+5. NO explanations, NO justifications, NO commas between skills on the same line.
+6. NO conversational filler. NO thinking process.
+7. Return ONLY the bulleted list. No intro or outro text.`;
 
-(Do NOT reuse this example in output unless explicitly applicable.)
-
-O – Output Rules
-ONLY when the JD is a valid request, generate the list of skills as discussed, else return: 'JD is very short, need more info on the JD'.
-
-No extra text. No explanations. No assumptions.
-
-T – Tone
-Professional. Structured. Precise. Enterprise HR/Senior Manager standard. Neutral and objective.`;
 
 const PANEL_SUMMARY_SYSTEM_PROMPT = `You are a Senior HR Manager reviewing a panel interview evaluation report.
 Write a detailed, professional assessment of the interview panel's performance.
 
-STRICT RULES — follow exactly:
-1. State the overall effectiveness clearly. The score is out of 10.0.
-NOISE ROBUSTNESS RULE: Ignore conversational noise, tangents, small talk, apologies, and connection drops. Do NOT mention them in your summary. Do NOT penalize the "Interview Process" or "Time Management" if the core technical questions asked were still deep and effective.
-2. Structure your summary to include points on:
-   - Panel Member Behavior: How professional, prepared, and thorough the interviewer appeared. (Base this ONLY on their technical probing, not small talk).
-   - Interview Process: The quality of the technical depth and validation. (Do NOT penalize for poor flow or time management if the script contained conversational noise).
-   - Rejection Reason Validation: State if the panel successfully extracted the candidate's weaknesses that led to the L2 rejection.
-   - Identified Gaps: If the Probing Depth verdict is 'DEEP_PROBING', state that there were no significant probing gaps. Only conclude with a probing deficiency for 'SURFACE_PROBING' or 'NO_PROBING' verdicts.
-3. Tone Mapping based on Verdict/Score:
-   - For "DEEP_PROBING" verdict OR Score >= 8.0: Highly positive summary praising technical validation.
-   - For SURFACE/NO probing verdicts AND Score < 8.0: Focus on critical gaps and missed opportunities.
-4. Format as a markdown bulleted list (using '-'). No intro or outro text. Keep it professional and high-level.
-5. Use highly formal, definitive business English. State facts directly.`;
+CRITICAL FORMAT RULES — follow EXACTLY:
+1. Output FOUR sections only, each starting with an exact header followed by a colon. 
+   Use this exact format for each section (no ** stars, no markdown bold):
+
+   Panel Member Behavior: <detailed analysis of interviewer professionalism and technical preparedness>
+   
+   Interview Process: <detailed analysis of technical depth, scenario probing, and all 8 dimensions>
+   
+   Rejection Reason Validation: <detailed analysis of how well the panel validated the candidate's actual L2 rejection reasons>
+   
+   Identified Gaps: <detailed analysis of specific probing gaps found in this interview>
+
+2. Write 3-4 detailed, professional points for each section.
+3. DO NOT use **bold**, *italic*, or any markdown formatting. Plain text only.
+4. Use highly formal, definitive business English.
+5. NOISE ROBUSTNESS: Ignore small talk, audio drops, or irrelevant tangents. Evaluate ONLY technical probing quality.
+6. Tone by Score:
+   - Score >= 8.0 or DEEP_PROBING verdict: Highly positive, praise technical depth.
+   - Score < 8.0 or SURFACE/NO_PROBING: Direct and constructive, naming specific missed areas.
+7. Make every section specific to the actual JD skills and transcript content — no generic filler.`;
 
 const GAP_ANALYSIS_SYSTEM_PROMPT = `You are a Quality Assurance Specialist for interview panels. 
 Your task is to write a short "Gap Analysis" summary based on the L2 Rejection Reasons and the panel's scoring gaps.
@@ -164,6 +155,7 @@ async function performPanelEvaluation(input) {
 
     evaluation.panel_summary = panelSummary;
     evaluation.gap_analysis = gapAnalysis;
+    evaluation.refined_jd = refinedJd;
 
     // 7. Store in DB
     await _storeEvaluationInDB({
@@ -633,19 +625,73 @@ function _validatePanelStructure(obj) {
  */
 async function _generateRefinedJD(jd) {
   try {
-    const userPrompt = `Please analyse the following Job Description and classify the required skills into Key Skills, Mandatory Skills, and Good To Have Skills:\n\nJob Description:\n${jd}`;
-    const raw = await _callGroqWithRetry(userPrompt, JD_REFINE_SYSTEM_PROMPT);
-    // Parse sections
-    const parsed = { key_skills: [], mandatory_skills: [], good_to_have_skills: [], raw };
-    const keyMatch = raw.match(/Key Skills[:\s]*([\s\S]*?)(?=Mandatory Skills|Good To Have Skills|$)/i);
-    const mandatoryMatch = raw.match(/Mandatory Skills[:\s]*([\s\S]*?)(?=Key Skills|Good To Have Skills|$)/i);
-    const goodMatch = raw.match(/Good To Have Skills[:\s]*([\s\S]*?)(?=Key Skills|Mandatory Skills|$)/i);
+    const userPrompt = `Analyse this Job Description and list ONLY the core skill names into Key, Mandatory, and Good To Have lists:\n\nJob Description:\n${jd}`;
+    const rawContent = await _callGroqWithRetry(userPrompt, JD_REFINE_SYSTEM_PROMPT);
+    
+    // Extra safety: strip any reasoning that leaked outside think blocks
+    let clean = rawContent.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    // Strip common AI filler if it leaked
+    clean = clean.split('\n').filter(line => {
+      const l = line.toLowerCase();
+      return !l.includes('wait,') && !l.includes('the user said') && !l.includes('inference') && !l.includes('thinking about');
+    }).join('\n');
 
+    const parsed = { key_skills: [], mandatory_skills: [], good_to_have_skills: [], raw: clean };
+    
+    // Flexible regexes to handle markdown stars, hashtags, and casing
+    const keyMatch = clean.match(/(?:[#*]*\s*)?Key\s+Skills\s*[:*]*\s*([\s\S]*?)(?=(?:[#*]*\s*)?(?:Mandatory|Good\s+To\s+Have|Good\s+To\s+Have\s+Skills)\s+Skills|Good\s+To\s+Have|$)/i);
+    const mandatoryMatch = clean.match(/(?:[#*]*\s*)?Mandatory\s+Skills\s*[:*]*\s*([\s\S]*?)(?=(?:[#*]*\s*)?(?:Key|Good\s+To\s+Have|Good\s+To\s+Have\s+Skills)\s+Skills|Good\s+To\s+Have|$)/i);
+    const goodMatch = clean.match(/(?:[#*]*\s*)?(?:Good\s+To\s+Have\s+Skills|Good\s+To\s+Have)\s*[:*]*\s*([\s\S]*?)(?=(?:[#*]*\s*)?(?:Key|Mandatory)\s+Skills|$)/i);
+
+    // Noise words that appear in AI reasoning but never in real skill names
+    const NOISE_PHRASES = [
+      'wait,', 'hmm,', 'i need', 'the user', 'so that', 'maybe', 'perhaps',
+      'actually', 'however', 'but the', 'deep understanding', 'experience with',
+      'the mention', 'this is', 'might struggle', 'another key', 'for the role',
+      'the candidate', 'the jd', 'the role', 'the panel', 'specific database',
+      'it is', 'it\'s', 'which', 'that is', 'let me', 'need to check',
+      'the rules', 'the example', 'inference', 'thinking about', 'i\'m', 'i think'
+    ];
+
+    const seenSkills = new Set();
     function extractLines(block) {
       if (!block) return [];
-      return block.trim().split('\n')
-        .map(l => l.replace(/^\d+\.\s*/, '').trim())
-        .filter(l => l.length > 2);
+      
+      // Split by newline first
+      let lines = block.trim().split('\n');
+      
+      // If we only have one line but it has commas/semicolons, it might be a single-line list
+      if (lines.length === 1 && (lines[0].includes(',') || lines[0].includes(';'))) {
+        lines = lines[0].split(/[,;]/);
+      }
+
+      return lines
+        .map(l => l.replace(/^[*•\-]\s*/, '').replace(/^\d+\.\s*/, '').replace(/<think>[\s\S]*?<\/think>/gi, '').trim())
+        .filter(l => {
+          const lower = l.toLowerCase();
+          if (lower.length <= 1) return false;
+          
+          // De-duplication check
+          if (seenSkills.has(lower)) return false;
+          
+          // Technical skill names are usually 1-4 words. Anything > 8 words is likely noise.
+          const wordCount = l.split(/\s+/).length;
+          if (wordCount > 8) return false;
+          
+          // Reject lines that contain AI-reasoning noise phrases
+          if (NOISE_PHRASES.some(p => lower.includes(p))) return false;
+          
+          // Specific case for things like ", and" or "and "
+          if (lower === 'and' || lower === '&') return false;
+
+          seenSkills.add(lower);
+          return true;
+        })
+        .map(l => {
+          // Strip trailing punctuation and filler words like "and"
+          return l.replace(/[.,;:]+$/, '').replace(/^and\s+/i, '').replace(/\s+and$/i, '').trim();
+        })
+        .filter(l => l.length > 1);
     }
 
     parsed.key_skills = extractLines(keyMatch?.[1]);
@@ -657,6 +703,7 @@ async function _generateRefinedJD(jd) {
     return null;
   }
 }
+
 
 /**
  * Generate a natural-language panel summary paragraph

@@ -26,7 +26,7 @@ function extractCsvRowForJobId(rawContent: string, jobId: string): string | null
   // Need at least 2 lines to be a multi-row CSV worth filtering
   if (lines.length < 2) return null;
 
-  // Detect and skip a header row (first line contains 'job' or 'id' with a comma)
+  // Detect and skip a header row
   const firstLineLower = lines[0].toLowerCase();
   const looksLikeHeader =
     firstLineLower.includes(',') &&
@@ -36,26 +36,37 @@ function extractCsvRowForJobId(rawContent: string, jobId: string): string | null
   const normalizedJobId = jobId.trim().toLowerCase();
 
   for (const line of dataLines) {
-    // Split on first comma only — content may contain commas
-    const commaIdx = line.indexOf(',');
-    if (commaIdx === -1) continue;
+    // Better CSV split that respects quotes
+    const columns = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
+    if (!columns || columns.length < 2) continue;
 
-    const rowJobId = line
-      .substring(0, commaIdx)
+    const rowJobId = columns[0]
       .trim()
-      .replace(/^"|"$/g, '') // strip surrounding quotes
+      .replace(/^"|"$/g, '')
       .toLowerCase();
 
     if (rowJobId === normalizedJobId) {
-      const content = line
-        .substring(commaIdx + 1)
-        .trim()
-        .replace(/^"|"$/g, '');
-      return content.length > 0 ? content : null;
+      // Find the JD column. According to the user, it is named "JD".
+      // If we have headers, we can be smart. If not, assume it's the 2nd column.
+      let jdContent = '';
+      if (looksLikeHeader) {
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase());
+        const jdIdx = headers.indexOf('jd');
+        if (jdIdx !== -1 && columns[jdIdx]) {
+          jdContent = columns[jdIdx];
+        } else {
+          // Fallback to column index 1 (second column)
+          jdContent = columns[1];
+        }
+      } else {
+        jdContent = columns[1];
+      }
+
+      return jdContent.trim().replace(/^"|"$/g, '').replace(/""/g, '"');
     }
   }
 
-  return null; // jobId not found in this CSV
+  return null;
 }
 
 export function useFileUpload() {
