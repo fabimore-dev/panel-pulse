@@ -1,5 +1,6 @@
 import { AppShell } from '@/components/layout/AppShell';
 import { BulkUploadForm } from '@/components/features/upload/BulkUploadForm';
+import { ExtractDetailsForm } from '@/components/features/extract/ExtractDetailsForm';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -26,6 +27,9 @@ export default function EvaluatePage() {
             </p>
           </div>
 
+          {/* Extract Details Section */}
+          <ExtractDetailsForm />
+          
           {/* One-touch bulk upload */}
           <BulkUploadForm />
         </div>

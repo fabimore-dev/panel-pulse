@@ -7,6 +7,7 @@ const embeddingsRoutes = require('./routes/embeddings');
 const searchRoutes = require('./routes/search');
 const jdRoutes = require('./routes/jd');
 const panelRoutes = require('./routes/panel');
+const extractRoutes = require('./routes/extract');
 const chatRoutes = require('./routes/chat');
 const authRoutes = require('./routes/auth');
 const requireAuth = require('./middleware/requireAuth');
@@ -30,6 +31,7 @@ app.use((req, res, next) => {
     FRONTEND_URL,                        // From env variable
     process.env.ALLOWED_ORIGIN,
     'http://localhost:5173',
+    'http://localhost:5174',             // Added for local dev on alternate port
     'http://localhost:3000'
   ].filter(Boolean);
 
@@ -60,7 +62,9 @@ app.use('/api/v1/embeddings', requireAuth, embeddingsRoutes);
 app.use('/api/v1/search', requireAuth, searchRoutes);
 app.use('/api/v1/jd', requireAuth, jdRoutes);
 app.use('/api/v1/panel', requireAuth, panelRoutes);
+app.use('/api/v1/extract', requireAuth, extractRoutes);
 app.use('/api/v1/chat', requireAuth, chatRoutes);
+
 
 const port = PORT;
 

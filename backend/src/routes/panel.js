@@ -154,6 +154,9 @@ router.post('/score', async (req, res) => {
       probing_verdict: result.evaluation.probing_verdict,
       evidence_count: result.evaluation.evidence.length,
       l2_validation: result.evaluation.l2_validation,
+      refined_jd: result.refined_jd,
+      panel_summary: result.panel_summary,
+      gap_analysis: result.gap_analysis,
       full_evaluation: result.evaluation,
       timestamp: result.timestamp
     });

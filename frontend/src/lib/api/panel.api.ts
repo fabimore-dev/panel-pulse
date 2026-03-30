@@ -53,7 +53,10 @@ function mapBackendToPanelScore(body: any, request: UploadRequest): PanelEfficie
     dimensions,
     evidence,
     timestamp: body.timestamp ?? new Date().toISOString(),
-  } as PanelEfficiencyScore;
+    refined_jd: body.refined_jd ?? full.refined_jd ?? null,
+    panel_summary: body.panel_summary ?? full.panel_summary ?? null,
+    gap_analysis: body.gap_analysis ?? full.gap_analysis ?? null,
+  } as any;
 }
 
 export const panelApi = {
@@ -90,7 +93,9 @@ export const panelApi = {
     };
 
     try {
-      const response = await apiClient.post('/api/v1/panel/score', body);
+      const response = await apiClient.post('/api/v1/panel/score', body, {
+        timeout: 360000, // 6 min — runs L2 validation + scoring + gap analysis + JD refine + summary
+      });
       const result = mapBackendToPanelScore(response.data, data);
       // Add cached indicator to result
       if (response.data?.is_cached) {

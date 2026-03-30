@@ -199,9 +199,10 @@ export const dashboardApi = {
         l2Validation: body.l2Validation,
         l2RejectionReasons: body.l2RejectionReasons ?? [],
         l1Transcript: body.l1Transcript || '',
-        evaluatedAt: body.evaluatedAt,
-        refinedJd: body.refinedJd ?? null,
-        panelSummary: body.panelSummary ?? null,
+        evaluatedAt: body.evaluatedAt ?? body.evaluated_at,
+        refinedJd: body.refinedJd ?? body.refined_jd ?? null,
+        panelSummary: body.panelSummary ?? body.panel_summary ?? null,
+        gapAnalysis: body.gapAnalysis ?? body.gap_analysis ?? null,
         scoreCategory: (body.score ?? 0) >= 8 ? 'Good' : (body.score ?? 0) >= 5 ? 'Moderate' : 'Poor'
       };
     } catch (error) {
