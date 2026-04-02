@@ -4,9 +4,15 @@ import toast from 'react-hot-toast';
 
 let API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
-// Force local backend if running on localhost to avoid production redirects during testing
+// Force local backend when running on localhost (dev mode)
 if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
   API_BASE_URL = 'http://localhost:3000';
+}
+
+// When VITE_API_BASE_URL is empty (production same-origin nginx), use relative URLs
+// so requests go through the same protocol (http or https) as the page itself.
+if (API_BASE_URL === '') {
+  API_BASE_URL = '';
 }
 
 export { API_BASE_URL };

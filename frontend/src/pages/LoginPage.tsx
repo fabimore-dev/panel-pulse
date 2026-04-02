@@ -18,6 +18,10 @@ import type { AuthUser } from '@/context/AuthContext';
 import TermsModal from '@/components/auth/TermsModal';
 import { API_BASE_URL } from '@/lib/api/client';
 
+// For the SSO link, always use an absolute URL based on the current origin
+// so it works whether API_BASE_URL is empty (same-origin nginx) or a full URL (dev)
+const SSO_BASE = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+
 const SSO_ERROR_MESSAGES: Record<string, string> = {
   sso_denied: 'SSO sign-in was cancelled or denied.',
   sso_no_code: 'SSO did not return an authorization code. Please try again.',
@@ -356,7 +360,7 @@ export default function LoginPage() {
               </div>
 
               <a
-                href={`${API_BASE_URL}/api/v1/auth/azure/login`}
+                href={`${SSO_BASE}/api/v1/auth/azure/login`}
                 className="w-full flex items-center justify-center gap-3 border border-border-primary
                            hover:bg-white/5 text-text-secondary hover:text-text-primary
                            font-medium text-sm rounded-xl py-3 transition-colors"
