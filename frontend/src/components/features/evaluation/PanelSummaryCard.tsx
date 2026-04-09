@@ -49,6 +49,13 @@ function parseHeader(line: string): { header: string; content: string } | null {
   return null;
 }
 
+const decodeHTML = (html: string) => {
+  if (typeof window === 'undefined') return html;
+  const txt = document.createElement('textarea');
+  txt.innerHTML = html;
+  return txt.value;
+};
+
 export function PanelSummaryCard({ summary, gapAnalysis, scoreCategory }: Props) {
   if (!summary) return null;
 
@@ -86,7 +93,7 @@ export function PanelSummaryCard({ summary, gapAnalysis, scoreCategory }: Props)
               <div key={i} className="mt-3 first:mt-0">
                 <span className="text-sm font-bold text-orange-400">{parsed.header}</span>
                 {parsed.content && (
-                  <span className="text-sm text-text-primary leading-relaxed ml-1">{parsed.content}</span>
+                  <span className="text-sm text-text-primary leading-relaxed ml-1">{decodeHTML(parsed.content)}</span>
                 )}
               </div>
             );
@@ -100,7 +107,7 @@ export function PanelSummaryCard({ summary, gapAnalysis, scoreCategory }: Props)
           return (
             <div key={i} className="flex items-start gap-2 text-sm text-text-primary leading-relaxed pl-1">
               <span className="mt-2 shrink-0 w-1 h-1 rounded-full bg-orange-500/60" />
-              <span>{line}</span>
+              <span>{decodeHTML(line)}</span>
             </div>
           );
         })}
@@ -120,7 +127,7 @@ export function PanelSummaryCard({ summary, gapAnalysis, scoreCategory }: Props)
                 .filter(Boolean)
                 .map((item, i) => (
                   <li key={i} className="leading-relaxed italic text-text-secondary">
-                    {item}
+                    {decodeHTML(item)}
                   </li>
                 ))}
             </ul>

@@ -20,6 +20,13 @@ interface Props {
   colour?: string;
 }
 
+const decodeHTML = (html: string) => {
+  if (typeof window === 'undefined') return html; // Fallback for SSR if needed
+  const txt = document.createElement('textarea');
+  txt.innerHTML = html;
+  return txt.value;
+};
+
 export function DimensionCard({ name, score, maxScore, evidence = [], colour }: Props) {
   const safeMax = maxScore > 0 ? maxScore : 1;
   const percent = Math.max(0, Math.min(100, (score / safeMax) * 100));
@@ -57,7 +64,7 @@ export function DimensionCard({ name, score, maxScore, evidence = [], colour }: 
                   className="italic text-text-muted line-clamp-2 border-l-2 pl-2"
                   style={{ borderColor: barColor + '70' }}
                 >
-                  {e}
+                  {decodeHTML(e)}
                 </li>
               ))}
             </ul>
